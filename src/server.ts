@@ -1,0 +1,23 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { generateCommentsRouter } from './routes/generate-comments';
+
+const app = express();
+const PORT = process.env.PORT ?? 3333;
+
+// Extension popup pages run under a chrome-extension:// origin, not http(s),
+// so a permissive CORS policy is fine here — no cookies/credentials are used
+// and the only sensitive value (Groq/Apify keys) never leaves the server.
+app.use(cors());
+app.use(express.json());
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.use('/api', generateCommentsRouter);
+
+app.listen(PORT, () => {
+  console.log(`LinkedIn Comment Assistant backend listening on http://localhost:${PORT}`);
+});
