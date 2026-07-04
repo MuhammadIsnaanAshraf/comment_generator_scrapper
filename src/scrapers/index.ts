@@ -10,6 +10,7 @@ export type { NormalizedPost, ScraperProvider, PostCategory } from './types';
  */
 export function getScraper(): ScraperProvider {
   const apiToken = process.env.APIFY_API_TOKEN;
+  console.log("🚀 ~ getScraper ~ apiToken:", apiToken)
   if (!apiToken) {
     throw new Error('APIFY_API_TOKEN is not set. Add it to backend/.env');
   }

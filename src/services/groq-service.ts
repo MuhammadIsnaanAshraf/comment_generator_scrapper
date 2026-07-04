@@ -104,6 +104,7 @@ export async function generateComments(
   let lastError: unknown;
   for (let attempt = 0; attempt < ENV_KEYS.length; attempt++) {
     const keyIndex = (currentKeyIndex + attempt) % ENV_KEYS.length;
+    console.log("🚀 ~ generateComments ~ keyIndex:", keyIndex)
     try {
       const result = await callGroqAPI(ENV_KEYS[keyIndex], post);
       currentKeyIndex = keyIndex;

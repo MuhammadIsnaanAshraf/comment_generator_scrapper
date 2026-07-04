@@ -46,9 +46,10 @@ function normalize(raw: ApifyPostItem, requestedUrl: string): NormalizedPost {
 }
 
 /**
- * Scrapes a single LinkedIn post via the Apify actor `supreme_coder/linkedin-post`,
- * which accepts direct post URLs (most LinkedIn scraper actors only support
- * search-by-keyword, not a specific post URL).
+ * Scrapes a single LinkedIn post via the Apify actor
+ * `harvestapi/linkedin-profile-posts`. Despite the "profile posts" name, its
+ * `targetUrls` input accepts a direct post permalink and returns just that
+ * post when `maxPosts` is 1.
  *
  * To switch providers later: write a new class implementing ScraperProvider
  * and swap the instance returned by scrapers/index.ts. Nothing else changes.
@@ -56,7 +57,7 @@ function normalize(raw: ApifyPostItem, requestedUrl: string): NormalizedPost {
 export class ApifyLinkedInPostScraper implements ScraperProvider {
   constructor(
     private readonly apiToken: string,
-    private readonly actorId: string = 'supreme_coder~linkedin-post'
+    private readonly actorId: string = 'harvestapi~linkedin-profile-posts'
   ) {}
 
   async scrapePost(url: string): Promise<NormalizedPost> {
@@ -66,8 +67,8 @@ export class ApifyLinkedInPostScraper implements ScraperProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        urls: [url],
-        limitPerSource: 1,
+        targetUrls: [url],
+        maxPosts: 1,
       }),
     });
 

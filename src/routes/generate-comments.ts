@@ -9,6 +9,7 @@ const LINKEDIN_POST_URL_PATTERN = /^https:\/\/(www\.)?linkedin\.com\/(posts|feed
 
 generateCommentsRouter.post('/generate-comments', async (req, res) => {
   const { url } = req.body ?? {};
+  console.log("🚀 ~ url:", url)
 
   if (typeof url !== 'string' || !LINKEDIN_POST_URL_PATTERN.test(url)) {
     res.status(400).json({ error: 'Provide a valid LinkedIn post URL (linkedin.com/posts/... or linkedin.com/feed/update/...).' });
@@ -17,16 +18,17 @@ generateCommentsRouter.post('/generate-comments', async (req, res) => {
 
   try {
     const post = await getScraper().scrapePost(url);
+    console.log("🚀 ~ post scrapped:", post)
 
     // Only textual posts are supported for now — image/video posts are a
     // follow-up. Revisit this guard when that support is added.
-    if (post.hasImage || post.hasVideo) {
-      res.status(422).json({
-        error: 'This post contains an image or video. Only text posts are supported right now.',
-        post,
-      });
-      return;
-    }
+    // if (post.hasImage || post.hasVideo) {
+    //   res.status(422).json({
+    //     error: 'This post contains an image or video. Only text posts are supported right now.',
+    //     post,
+    //   });
+    //   return;
+    // }
 
     if (!post.postText.trim()) {
       res.status(422).json({ error: 'Could not find any text content on this post.', post });
@@ -34,6 +36,7 @@ generateCommentsRouter.post('/generate-comments', async (req, res) => {
     }
 
     const result = await generateComments(post);
+    console.log("🚀 ~ result:", result)
     const category = result.category || detectCategory(post.postText);
 
     res.json({
