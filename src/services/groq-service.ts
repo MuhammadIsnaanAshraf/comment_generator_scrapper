@@ -66,17 +66,22 @@ Return ONLY this JSON, no other text:
   "category": "professional|casual|hiring|achievement"
 }`;
 
-function buildUserPrompt(post: NormalizedPost): string {
+function buildUserPrompt(post: NormalizedPost, videoTranscript?: string): string {
   let prompt = `Post by ${post.authorName} (${post.authorHeadline}):\n\n${post.postText}`;
   if (post.hasImage) prompt += '\n\nContains an image.';
-  if (post.hasVideo) prompt += '\n\nContains a video.';
+  if (post.hasVideo) {
+    prompt += videoTranscript
+      ? `\n\nThe post includes a video. Transcript of the video's audio:\n${videoTranscript}`
+      : '\n\nContains a video.';
+  }
   prompt += '\n\nGenerate 2 comments for this post.';
   return prompt;
 }
 
 async function callGroqAPI(
   apiKey: string,
-  post: NormalizedPost
+  post: NormalizedPost,
+  videoTranscript?: string
 ): Promise<{ comment1: string; comment2: string; category: string }> {
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
@@ -90,7 +95,7 @@ async function callGroqAPI(
       max_tokens: 300,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(post) },
+        { role: 'user', content: buildUserPrompt(post, videoTranscript) },
       ],
     }),
   });
@@ -122,7 +127,8 @@ async function callGroqAPI(
 }
 
 export async function generateComments(
-  post: NormalizedPost
+  post: NormalizedPost,
+  videoTranscript?: string
 ): Promise<{ comment1: string; comment2: string; category: string }> {
   if (ENV_KEYS.length === 0) {
     throw new Error('No Groq API keys configured. Add GROQ_KEY_1 (and optionally GROQ_KEY_2) to backend/.env');
@@ -138,7 +144,7 @@ export async function generateComments(
     const keyIndex = (currentKeyIndex + attempt) % ENV_KEYS.length;
     console.log("🚀 ~ generateComments ~ keyIndex:", keyIndex)
     try {
-      const result = await callGroqAPI(ENV_KEYS[keyIndex], post);
+      const result = await callGroqAPI(ENV_KEYS[keyIndex], post, videoTranscript);
       currentKeyIndex = keyIndex;
       return result;
     } catch (error) {
