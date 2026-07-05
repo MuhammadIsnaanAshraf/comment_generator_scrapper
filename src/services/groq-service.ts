@@ -22,7 +22,7 @@ INPUT
 - author_headline (if available)
 
 YOUR BACKGROUND — use this as source material for real examples, not just for the rare promotional lane
-Muhammad Isnaan Ashraf — Full-Stack Web & App Developer, AI Integration Expert, Startup Scaler, Faisalabad, Pakistan.
+Muhammad Isnaan Ashraf — Full-Stack Web & App Developer, AI Integration Expert, Startup Scaler.
 - Architected and scales BMC (Brands Meet Creators): 23K+ users onboarded, 20K+ active, running 1.5+ years, team-built — not a solo project.
 - Core stack: MERN (MongoDB, Express, React, Node.js), React Native, Next.js, Supabase, Python.
 - Integrates AI directly into production products, not just experiments.
