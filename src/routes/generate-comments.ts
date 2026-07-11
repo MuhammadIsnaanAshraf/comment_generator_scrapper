@@ -3,12 +3,13 @@ import { getScraper } from '../scrapers';
 import { getTranscriber } from '../transcription';
 import { generateComments } from '../services/groq-service';
 import { detectCategory } from '../services/category';
+import { requireAuth } from '../middleware/require-auth';
 
 export const generateCommentsRouter = Router();
 
 const LINKEDIN_POST_URL_PATTERN = /^https:\/\/(www\.)?linkedin\.com\/(posts|feed\/update)\//i;
 
-generateCommentsRouter.post('/generate-comments', async (req, res) => {
+generateCommentsRouter.post('/generate-comments', requireAuth, async (req, res) => {
   const { url } = req.body ?? {};
   console.log("🚀 ~ url:", url)
 
