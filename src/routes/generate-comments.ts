@@ -41,7 +41,7 @@ generateCommentsRouter.post('/generate-comments', requireAuth, async (req, res) 
       return;
     }
 
-    const result = await generateComments(post, videoTranscript);
+    const result = await generateComments(post, req.user!.id, videoTranscript);
     console.log("🚀 ~ result:", result)
     const category = result.category || detectCategory(post.postText);
 

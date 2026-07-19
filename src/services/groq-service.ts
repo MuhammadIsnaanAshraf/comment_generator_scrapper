@@ -1,5 +1,6 @@
 import { NormalizedPost } from '../scrapers/types';
 import { detectCategory } from './category';
+import { getBmcUsedRecently, logGeneration } from './generation-log';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
@@ -78,10 +79,12 @@ Return ONLY this JSON, no other text:
 {
   "comment1": "first comment text here",
   "comment2": "second comment text here",
-  "category": "professional|casual|hiring|achievement"
+  "category": "professional|casual|hiring|achievement",
+  "stance1": "agreement|contrarian|counter-question|direct-answer|promotional",
+  "stance2": "agreement|contrarian|counter-question|direct-answer|promotional"
 }`;
 
-function buildUserPrompt(post: NormalizedPost, videoTranscript?: string): string {
+function buildUserPrompt(post: NormalizedPost, videoTranscript?: string, suppressBmc?: boolean): string {
   let prompt = `Post by ${post.authorName} (${post.authorHeadline}):\n\n${post.postText}`;
   if (post.hasImage) prompt += '\n\nContains an image.';
   if (post.hasVideo) {
@@ -89,15 +92,28 @@ function buildUserPrompt(post: NormalizedPost, videoTranscript?: string): string
       ? `\n\nThe post includes a video. Transcript of the video's audio:\n${videoTranscript}`
       : '\n\nContains a video.';
   }
+  if (suppressBmc) {
+    prompt +=
+      '\n\nRESTRICTION FOR THIS CALL: your BMC background has already shown up in several recent comments. Do NOT mention BMC, "Brands Meet Creators", or any of your own background/work in either comment this time — respond from general experience only, with no self-reference.';
+  }
   prompt += '\n\nGenerate 2 comments for this post.';
   return prompt;
+}
+
+interface GroqCommentResult {
+  comment1: string;
+  comment2: string;
+  category: string;
+  stance1: string;
+  stance2: string;
 }
 
 async function callGroqAPI(
   apiKey: string,
   post: NormalizedPost,
-  videoTranscript?: string
-): Promise<{ comment1: string; comment2: string; category: string }> {
+  videoTranscript?: string,
+  suppressBmc?: boolean
+): Promise<GroqCommentResult> {
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
     headers: {
@@ -110,7 +126,7 @@ async function callGroqAPI(
       max_tokens: 300,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(post, videoTranscript) },
+        { role: 'user', content: buildUserPrompt(post, videoTranscript, suppressBmc) },
       ],
     }),
   });
@@ -125,7 +141,7 @@ async function callGroqAPI(
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const raw = data.choices?.[0]?.message?.content ?? '';
 
-  let parsed: { comment1: string; comment2: string; category: string };
+  let parsed: Partial<GroqCommentResult>;
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -138,13 +154,20 @@ async function callGroqAPI(
     throw new Error('Groq response missing comment fields');
   }
 
-  return parsed;
+  return {
+    comment1: parsed.comment1,
+    comment2: parsed.comment2,
+    category: parsed.category ?? '',
+    stance1: parsed.stance1 ?? '',
+    stance2: parsed.stance2 ?? '',
+  };
 }
 
 export async function generateComments(
   post: NormalizedPost,
+  userId: string,
   videoTranscript?: string
-): Promise<{ comment1: string; comment2: string; category: string }> {
+): Promise<GroqCommentResult> {
   if (ENV_KEYS.length === 0) {
     throw new Error('No Groq API keys configured. Add GROQ_KEY_1 (and optionally GROQ_KEY_2) to backend/.env');
   }
@@ -154,13 +177,26 @@ export async function generateComments(
     lastReset = Date.now();
   }
 
+  const suppressBmc = await getBmcUsedRecently(userId);
+
   let lastError: unknown;
   for (let attempt = 0; attempt < ENV_KEYS.length; attempt++) {
     const keyIndex = (currentKeyIndex + attempt) % ENV_KEYS.length;
-    console.log("🚀 ~ generateComments ~ keyIndex:", keyIndex)
     try {
-      const result = await callGroqAPI(ENV_KEYS[keyIndex], post, videoTranscript);
+      const result = await callGroqAPI(ENV_KEYS[keyIndex], post, videoTranscript, suppressBmc);
       currentKeyIndex = keyIndex;
+
+      await logGeneration({
+        userId,
+        postUrl: post.postUrl,
+        postText: post.postText,
+        category: result.category,
+        stance1: result.stance1,
+        stance2: result.stance2,
+        comment1: result.comment1,
+        comment2: result.comment2,
+      });
+
       return result;
     } catch (error) {
       lastError = error;
