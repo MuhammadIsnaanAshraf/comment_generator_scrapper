@@ -1,6 +1,7 @@
 import { NormalizedPost } from '../scrapers/types';
 import { detectCategory } from './category';
 import { getBmcUsedRecently, logGeneration } from './generation-log';
+import { UserProfile } from './user-profile';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
@@ -15,19 +16,14 @@ const ENV_KEYS: string[] = [process.env.GROQ_KEY_1, process.env.GROQ_KEY_2].filt
 let currentKeyIndex = 0;
 let lastReset = Date.now();
 
-const SYSTEM_PROMPT = `You are a LinkedIn comment writer. You read one post and generate TWO different comments for it.
+const SYSTEM_PROMPT_TEMPLATE = `You are a LinkedIn comment writer. You read one post and generate TWO different comments for it.
 
 INPUT
 - post_content: full text of the post
 - author_name
 - author_headline (if available)
 
-YOUR BACKGROUND — use this as source material for real examples, not just for the rare promotional lane
-Muhammad Isnaan Ashraf — Full-Stack Web & App Developer, AI Integration Expert, Startup Scaler.
-- Architected and scales BMC (Brands Meet Creators): 23K+ users onboarded, 20K+ active, running 1.5+ years, team-built — not a solo project.
-- Core stack: MERN (MongoDB, Express, React, Node.js), React Native, Next.js, Supabase, Python.
-- Integrates AI directly into production products, not just experiments.
-- 2+ years shipping real software to real users, including the mistakes that came with scaling BMC — feature creep, over-engineering early, architecture decisions that had to be redone at scale.
+{{user_background}}
 
 STEP 0 — READ FOR FOUR THINGS BEFORE WRITING ANYTHING
 1. The single most specific claim, number, or decision in the post — the thing you could quote back in 5 words. React to this, not the post's general theme.
@@ -84,6 +80,23 @@ Return ONLY this JSON, no other text:
   "stance2": "agreement|contrarian|counter-question|direct-answer|promotional"
 }`;
 
+function buildUserBackgroundBlock(profile: UserProfile): string {
+  const bulletLines = [...profile.background.keyStats, ...profile.background.lessons].map((line) => `- ${line}`);
+  if (profile.background.stack.length) {
+    bulletLines.splice(1, 0, `- Core stack: ${profile.background.stack.join(', ')}.`);
+  }
+
+  return [
+    'YOUR BACKGROUND — use this as source material for real examples, not just for the rare promotional lane',
+    `${profile.name} — ${profile.headline}.`,
+    ...bulletLines,
+  ].join('\n');
+}
+
+function buildSystemPrompt(profile: UserProfile): string {
+  return SYSTEM_PROMPT_TEMPLATE.replace('{{user_background}}', buildUserBackgroundBlock(profile));
+}
+
 function buildUserPrompt(post: NormalizedPost, videoTranscript?: string, suppressBmc?: boolean): string {
   let prompt = `Post by ${post.authorName} (${post.authorHeadline}):\n\n${post.postText}`;
   if (post.hasImage) prompt += '\n\nContains an image.';
@@ -108,8 +121,15 @@ interface GroqCommentResult {
   stance2: string;
 }
 
+export interface GenerationResult extends GroqCommentResult {
+  // Null when generation_log couldn't be written (no service-role key, or the
+  // insert failed). Callers must treat it as "feedback can't be attached".
+  generationId: string | null;
+}
+
 async function callGroqAPI(
   apiKey: string,
+  systemPrompt: string,
   post: NormalizedPost,
   videoTranscript?: string,
   suppressBmc?: boolean
@@ -125,7 +145,7 @@ async function callGroqAPI(
       temperature: 0.7,
       max_tokens: 300,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: buildUserPrompt(post, videoTranscript, suppressBmc) },
       ],
     }),
@@ -166,8 +186,9 @@ async function callGroqAPI(
 export async function generateComments(
   post: NormalizedPost,
   userId: string,
+  profile: UserProfile,
   videoTranscript?: string
-): Promise<GroqCommentResult> {
+): Promise<GenerationResult> {
   if (ENV_KEYS.length === 0) {
     throw new Error('No Groq API keys configured. Add GROQ_KEY_1 (and optionally GROQ_KEY_2) to backend/.env');
   }
@@ -178,17 +199,19 @@ export async function generateComments(
   }
 
   const suppressBmc = await getBmcUsedRecently(userId);
+  const systemPrompt = buildSystemPrompt(profile);
 
   let lastError: unknown;
   for (let attempt = 0; attempt < ENV_KEYS.length; attempt++) {
     const keyIndex = (currentKeyIndex + attempt) % ENV_KEYS.length;
     try {
-      const result = await callGroqAPI(ENV_KEYS[keyIndex], post, videoTranscript, suppressBmc);
+      const result = await callGroqAPI(ENV_KEYS[keyIndex], systemPrompt, post, videoTranscript, suppressBmc);
       currentKeyIndex = keyIndex;
 
-      await logGeneration({
+      const generationId = await logGeneration({
         userId,
-        postUrl: post.postUrl,
+        postUrl: post.postUrl || null,
+        postId: post.postId || null,
         postText: post.postText,
         category: result.category,
         stance1: result.stance1,
@@ -197,7 +220,7 @@ export async function generateComments(
         comment2: result.comment2,
       });
 
-      return result;
+      return { ...result, generationId };
     } catch (error) {
       lastError = error;
       const status = (error as { status?: number }).status;
