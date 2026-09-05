@@ -49,10 +49,10 @@ async function respondWithGeneratedComments(
 generateCommentsRouter.post('/generate-comments', requireAuth, async (req, res) => {
   const { url } = req.body ?? {};
 
-  if (typeof url !== 'string' || !LINKEDIN_POST_URL_PATTERN.test(url)) {
-    res.status(400).json({ error: 'Provide a valid LinkedIn post URL (linkedin.com/posts/... or linkedin.com/feed/update/...).' });
-    return;
-  }
+  // if (typeof url !== 'string' || !LINKEDIN_POST_URL_PATTERN.test(url)) {
+  //   res.status(400).json({ error: 'Provide a valid LinkedIn post URL (linkedin.com/posts/... or linkedin.com/feed/update/...).' });
+  //   return;
+  // }
 
   try {
     const post = await getScraper().scrapePost(url);
