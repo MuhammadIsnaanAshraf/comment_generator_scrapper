@@ -4,7 +4,7 @@ import { getBmcUsedRecently, logGeneration } from './generation-log';
 import { UserProfile } from './user-profile';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.3-70b-versatile';
+const MODEL = 'llama-3.1-70b-versatile';
 const KEY_RESET_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 const ENV_KEYS: string[] = [process.env.GROQ_KEY_1, process.env.GROQ_KEY_2].filter(
