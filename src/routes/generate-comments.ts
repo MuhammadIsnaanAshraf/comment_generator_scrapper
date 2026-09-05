@@ -6,6 +6,7 @@ import { detectCategory } from '../services/category';
 import { requireAuth } from '../middleware/require-auth';
 import { getUserProfile } from '../services/user-profile';
 import { NormalizedPost } from '../scrapers/types';
+import { resolvePostUrl } from '../scrapers/resolve-post-url';
 import { GenerationFeedbackUpdate, updateGenerationFeedback } from '../services/generation-log';
 
 export const generateCommentsRouter = Router();
@@ -49,13 +50,29 @@ async function respondWithGeneratedComments(
 generateCommentsRouter.post('/generate-comments', requireAuth, async (req, res) => {
   const { url } = req.body ?? {};
 
-  // if (typeof url !== 'string' || !LINKEDIN_POST_URL_PATTERN.test(url)) {
-  //   res.status(400).json({ error: 'Provide a valid LinkedIn post URL (linkedin.com/posts/... or linkedin.com/feed/update/...).' });
-  //   return;
-  // }
+  if (typeof url !== 'string' || !url.trim()) {
+    res.status(400).json({ error: 'Provide a LinkedIn post URL.' });
+    return;
+  }
+
+  // Share links (lnkd.in, and similar) redirect to the canonical
+  // linkedin.com permalink Apify requires — resolve before validating, so a
+  // shortened link isn't rejected for not matching the pattern yet.
+  let resolvedUrl: string;
+  try {
+    resolvedUrl = await resolvePostUrl(url.trim());
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not resolve this link.' });
+    return;
+  }
+
+  if (!LINKEDIN_POST_URL_PATTERN.test(resolvedUrl)) {
+    res.status(400).json({ error: 'Provide a valid LinkedIn post URL (linkedin.com/posts/... or linkedin.com/feed/update/...).' });
+    return;
+  }
 
   try {
-    const post = await getScraper().scrapePost(url);
+    const post = await getScraper().scrapePost(resolvedUrl);
 
     let videoTranscript: string | undefined;
     if (post.hasVideo && post.videoUrl) {
