@@ -4,7 +4,23 @@ import { getBmcUsedRecently, logGeneration } from './generation-log';
 import { UserProfile } from './user-profile';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.1-70b-versatile';
+
+// Groq decommissioned the Llama chat models; gpt-oss-120b is the strongest
+// general model left on the account (verified against GET /v1/models).
+const MODEL = 'openai/gpt-oss-120b';
+
+// gpt-oss is a REASONING model: it spends completion tokens thinking before
+// it writes anything, and those tokens come out of the same budget as the
+// answer. At the default effort this prompt burned ~300 reasoning tokens and
+// returned EMPTY content. 'low' keeps thinking to ~120-170 tokens, which is
+// plenty for a 2-comment JSON reply and keeps latency under a second.
+// If you switch MODEL to a non-reasoning model, drop this field.
+const REASONING_EFFORT = 'low';
+
+// Headroom for reasoning tokens + the JSON body (~250 tokens of actual
+// answer). Not set higher because max_completion_tokens counts against the
+// per-minute output-token quota, and an oversized request gets 429'd.
+const MAX_COMPLETION_TOKENS = 700;
 const KEY_RESET_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 const ENV_KEYS: string[] = [process.env.GROQ_KEY_1, process.env.GROQ_KEY_2].filter(
@@ -143,7 +159,8 @@ async function callGroqAPI(
     body: JSON.stringify({
       model: MODEL,
       temperature: 0.7,
-      max_tokens: 300,
+      reasoning_effort: REASONING_EFFORT,
+      max_completion_tokens: MAX_COMPLETION_TOKENS,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: buildUserPrompt(post, videoTranscript, suppressBmc) },
